@@ -1,0 +1,8 @@
+use super::*;
+use soroban_sdk::Env;
+
+#[test]
+fn test_token_stub() {
+    // TODO: Implement token contract tests
+    let _env = Env::default();
+}

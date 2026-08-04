@@ -1,0 +1,73 @@
+use super::*;
+use soroban_sdk::{testutils::Address as _, testutils::Events, vec, Address, Env, IntoVal, Symbol};
+
+fn create_and_register<'a>(env: &Env) -> Address {
+    let contract_id = Address::generate(&env);
+    env.mock_all_auths();
+    env.register(
+        &CounterContract,
+        &contract_id,
+    );
+    contract_id
+}
+
+#[test]
+fn test_increment_from_zero() {
+    let env = Env::default();
+    let contract_id = create_and_register(&env);
+    let client = CounterContractClient::new(&env, &contract_id);
+
+    let result = client.increment();
+    assert_eq!(result, 1);
+
+    let events = env.events().all();
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].data,
+        (Symbol::new(&env, "incr"), 1u32).into_val(&env)
+    );
+}
+
+#[test]
+fn test_increment_multiple_times() {
+    let env = Env::default();
+    let contract_id = create_and_register(&env);
+    let client = CounterContractClient::new(&env, &contract_id);
+
+    assert_eq!(client.increment(), 1);
+    assert_eq!(client.increment(), 2);
+    assert_eq!(client.increment(), 3);
+    assert_eq!(client.get_count(), 3);
+}
+
+#[test]
+fn test_decrement_from_zero_stays_at_zero() {
+    let env = Env::default();
+    let contract_id = create_and_register(&env);
+    let client = CounterContractClient::new(&env, &contract_id);
+
+    let result = client.decrement();
+    assert_eq!(result, 0);
+    assert_eq!(client.get_count(), 0);
+}
+
+#[test]
+fn test_decrement_after_increment() {
+    let env = Env::default();
+    let contract_id = create_and_register(&env);
+    let client = CounterContractClient::new(&env, &contract_id);
+
+    assert_eq!(client.increment(), 1);
+    assert_eq!(client.increment(), 2);
+    assert_eq!(client.decrement(), 1);
+    assert_eq!(client.get_count(), 1);
+}
+
+#[test]
+fn test_get_count_defaults_to_zero() {
+    let env = Env::default();
+    let contract_id = create_and_register(&env);
+    let client = CounterContractClient::new(&env, &contract_id);
+
+    assert_eq!(client.get_count(), 0);
+}

@@ -1,0 +1,67 @@
+# {{PROJECT_NAME}}
+
+A Soroban smart contract scaffolded by [Sorokit](https://github.com/Soro-kiit/soroban-scaffold).
+
+## Template: Basic Counter
+
+This is a minimal learning-friendly counter contract that demonstrates:
+- `#![no_std]` Soroban contract structure
+- Instance storage via `DataKey` enum
+- State mutation: `increment()`, `decrement()`
+- State reading: `get_count()`
+- Events published on each state change
+- Full test suite using Soroban testutils
+
+## Prerequisites
+
+- Rust 1.76+ with `wasm32-unknown-unknown` target
+- [Soroban CLI](https://developers.stellar.org/docs/build/smart-contracts/setup) installed
+
+## Build
+
+```bash
+cargo build --target wasm32-unknown-unknown --release
+```
+
+The optimized WASM will be at:
+```
+target/wasm32-unknown-unknown/release/{{PROJECT_NAME}}.wasm
+```
+
+## Test
+
+```bash
+cargo test
+```
+
+## Deploy (Testnet)
+
+```bash
+soroban contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/{{PROJECT_NAME}}.wasm \
+  --source-account <YOUR_SECRET_KEY> \
+  --rpc-url https://soroban-testnet.stellar.org:443 \
+  --network-passphrase "Test SDF Network ; September 2015"
+```
+
+## Project Structure
+
+```
+{{PROJECT_NAME}}/
+├── src/
+│   ├── lib.rs       # Contract entry point, types, and logic
+│   └── test.rs      # Test suite
+├── Cargo.toml       # Workspace + dependencies (soroban-sdk 22.x)
+└── README.md
+```
+
+## Next Steps
+
+1. Run `cargo test` to confirm the template compiles and tests pass
+2. Modify `src/lib.rs` to implement your contract logic
+3. Update `src/test.rs` to add tests for your new functions
+4. Build and deploy to Stellar Testnet
+
+## License
+
+MIT — authored by {{AUTHOR}}

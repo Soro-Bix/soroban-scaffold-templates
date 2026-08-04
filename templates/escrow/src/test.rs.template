@@ -1,0 +1,8 @@
+use super::*;
+use soroban_sdk::Env;
+
+#[test]
+fn test_escrow_stub() {
+    // TODO: Implement escrow contract tests
+    let _env = Env::default();
+}

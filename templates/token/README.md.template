@@ -1,0 +1,28 @@
+# {{PROJECT_NAME}}
+
+A Soroban token contract scaffolded by [Sorokit](https://github.com/Soro-kiit/soroban-scaffold).
+
+## Template: Token (Soroban Token Interface)
+
+_Template stub — full implementation coming soon._
+
+## Prerequisites
+
+- Rust 1.76+ with `wasm32-unknown-unknown` target
+- [Soroban CLI](https://developers.stellar.org/docs/build/smart-contracts/setup) installed
+
+## Build
+
+```bash
+cargo build --target wasm32-unknown-unknown --release
+```
+
+## Test
+
+```bash
+cargo test
+```
+
+## License
+
+MIT — authored by {{AUTHOR}}
