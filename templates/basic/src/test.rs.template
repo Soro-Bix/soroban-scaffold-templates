@@ -1,14 +1,9 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Events, vec, Address, Env, IntoVal, Symbol};
+use soroban_sdk::{testutils::Events, vec, Address, Env, IntoVal, Symbol};
 
-fn create_and_register<'a>(env: &Env) -> Address {
-    let contract_id = Address::generate(&env);
+fn create_and_register(env: &Env) -> Address {
     env.mock_all_auths();
-    env.register(
-        &CounterContract,
-        &contract_id,
-    );
-    contract_id
+    env.register(CounterContract, ())
 }
 
 #[test]
@@ -23,8 +18,15 @@ fn test_increment_from_zero() {
     let events = env.events().all();
     assert_eq!(events.len(), 1);
     assert_eq!(
-        events[0].data,
-        (Symbol::new(&env, "incr"), 1u32).into_val(&env)
+        events,
+        vec![
+            &env,
+            (
+                contract_id.clone(),
+                (Symbol::new(&env, "incr"),).into_val(&env),
+                1u32.into_val(&env)
+            )
+        ]
     );
 }
 

@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: build (${{ matrix.template }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        template: [basic, token, escrow]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Render template with dummy values
+        run: |
+          set -euo pipefail
+          TEMPLATE_DIR="templates/${{ matrix.template }}"
+          OUT_DIR="${{ runner.temp }}/rendered"
+          mkdir -p "$OUT_DIR"
+          find "$TEMPLATE_DIR" -type f | while IFS= read -r f; do
+            rel="${f#$TEMPLATE_DIR/}"
+            rel="${rel%.template}"
+            dest="$OUT_DIR/$rel"
+            mkdir -p "$(dirname "$dest")"
+            sed -e 's/{{PROJECT_NAME}}/ci-test-contract/g' -e 's/{{AUTHOR}}/CI Bot/g' "$f" > "$dest"
+          done
+          echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
+
+      # soroban-env-host's testutils feature currently pulls in ed25519-dalek
+      # 3.0.0 alongside an older ed25519-dalek used elsewhere in the graph,
+      # and the two disagree on which rand_core CryptoRng impl ChaCha20Rng
+      # satisfies. Pinning back to 2.2.0 (what the rest of the graph already
+      # uses) resolves the diamond. `|| true` so this becomes a no-op once
+      # upstream fixes it instead of breaking CI.
+      - name: Work around ed25519-dalek/rand_core version conflict
+        working-directory: ${{ env.OUT_DIR }}
+        run: |
+          cargo generate-lockfile
+          cargo update -p ed25519-dalek@3.0.0 --precise 2.2.0 || true
+
+      - name: cargo build
+        working-directory: ${{ env.OUT_DIR }}
+        run: cargo build
+
+      - name: cargo build (wasm32-unknown-unknown)
+        working-directory: ${{ env.OUT_DIR }}
+        run: cargo build --target wasm32-unknown-unknown
+
+      - name: cargo test
+        working-directory: ${{ env.OUT_DIR }}
+        run: cargo test
