@@ -1,6 +1,6 @@
 # Soroban Scaffold Templates
 
-This repository contains the contract templates used by the [Soroban Scaffold CLI](https://github.com/Soro-kiit/soroban-scaffold).
+This repository contains the contract templates used by the [Soroban Scaffold CLI](https://github.com/Soro-Bix/soroban-scaffold).
 
 When you run `sorokit init my-project`, the CLI copies and renders one of these templates into your new project directory.
 
@@ -39,4 +39,4 @@ At generation time, the CLI:
 
 ## License
 
-MIT — part of the Soro-kiit ecosystem
+MIT — part of the Soro-Bix ecosystem
