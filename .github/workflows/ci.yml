@@ -38,26 +38,21 @@ jobs:
           done
           echo "OUT_DIR=$OUT_DIR" >> "$GITHUB_ENV"
 
-      # soroban-env-host's testutils feature currently pulls in ed25519-dalek
-      # 3.0.0 alongside an older ed25519-dalek used elsewhere in the graph,
-      # and the two disagree on which rand_core CryptoRng impl ChaCha20Rng
-      # satisfies. Pinning back to 2.2.0 (what the rest of the graph already
-      # uses) resolves the diamond. `|| true` so this becomes a no-op once
-      # upstream fixes it instead of breaking CI.
-      - name: Work around ed25519-dalek/rand_core version conflict
-        working-directory: ${{ env.OUT_DIR }}
-        run: |
-          cargo generate-lockfile
-          cargo update -p ed25519-dalek@3.0.0 --precise 2.2.0 || true
-
+      # Each template ships a pre-generated, verified Cargo.lock.template that
+      # pins ed25519-dalek to 2.2.0 — soroban-env-host's testutils feature
+      # otherwise pulls in ed25519-dalek 3.0.0 alongside the older
+      # ed25519-dalek used elsewhere in the graph, and the two disagree on
+      # which rand_core CryptoRng impl ChaCha20Rng satisfies. --locked makes
+      # cargo fail loudly instead of silently re-resolving (and losing the
+      # pin) if Cargo.toml and Cargo.lock ever drift out of sync.
       - name: cargo build
         working-directory: ${{ env.OUT_DIR }}
-        run: cargo build
+        run: cargo build --locked
 
       - name: cargo build (wasm32-unknown-unknown)
         working-directory: ${{ env.OUT_DIR }}
-        run: cargo build --target wasm32-unknown-unknown
+        run: cargo build --locked --target wasm32-unknown-unknown
 
       - name: cargo test
         working-directory: ${{ env.OUT_DIR }}
-        run: cargo test
+        run: cargo test --locked
