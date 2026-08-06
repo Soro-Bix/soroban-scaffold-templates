@@ -43,3 +43,19 @@ Templates use {{PROJECT_NAME}} and {{AUTHOR}} as placeholder variables that the 
 - Populate token/ and escrow/ templates
 - Make the CLI's template path configurable instead of a hardcoded sibling-repo path
 - Fix the ed25519-dalek/rand_core conflict for real generated projects (see above), not just CI
+
+## Session 4 — 2026-08-06
+
+### What was fixed
+- Corrected org name `Soro-kiit` → `Soro-Bix` (matches the actual GitHub org) in `README.md` and all three `README.md.template` files
+- Fixed the ed25519-dalek/rand_core conflict for real generated projects, not just CI (see Session 3's "known issue"): added a pre-generated, individually verified `Cargo.lock.template` to **all three** templates (`basic`, `token`, `escrow` — not just `basic`, since all three declare the same `testutils` dev-dependency and hit the identical failure), with `{{PROJECT_NAME}}` substituted into the root package's `name` field like any other template variable. `copyTemplate` in the CLI already copies and renders arbitrary `*.template` files generically, so this required zero CLI code changes.
+- Removed `Cargo.lock` from all three `.gitignore.template` files — for a deployable smart contract (not a library), committing the lockfile is the idiomatic Rust practice, and it's the actual fix here: without it, generated projects keep re-resolving fresh and can hit the same conflict again after any dependency drift.
+- Verified via the real CLI end-to-end: `sorokit init fixed-test-project` → `cargo test` passes 5/5 with zero manual intervention (no `cargo update`, no pinning) — this is the first time the actual literal `sorokit init` → `cargo test` path has been proven to work for a real user.
+
+### Caveat
+- Each `Cargo.lock.template` pins the dependency graph as resolved on 2026-08-06 (`soroban-sdk` 22.0.11, `soroban-env-host` 22.1.3, `ed25519-dalek` 2.2.0). This is a snapshot, not a permanently-correct answer — it will need periodic regeneration as `soroban-sdk` releases new versions, same as any committed lockfile.
+
+### Next session
+- Populate token/ and escrow/ templates with real contract logic
+- Make the CLI's template path configurable instead of a hardcoded sibling-repo path
+- Periodically regenerate the three `Cargo.lock.template` files against newer `soroban-sdk` releases
