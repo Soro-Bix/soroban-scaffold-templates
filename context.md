@@ -59,3 +59,24 @@ Templates use {{PROJECT_NAME}} and {{AUTHOR}} as placeholder variables that the 
 - Populate token/ and escrow/ templates with real contract logic
 - Make the CLI's template path configurable instead of a hardcoded sibling-repo path
 - Periodically regenerate the three `Cargo.lock.template` files against newer `soroban-sdk` releases
+
+## Session 5 — 2026-08-07
+
+### What was built
+- `token/` template: real SEP-41-shaped fungible token contract (`initialize`, `mint`, `transfer`, `transfer_from`, `approve`, `allowance`, `balance`, `total_supply`, `name`, `symbol`, `decimals`, `burn`), persistent storage for balances/allowances, instance storage for metadata/admin, `require_auth()` on every state-changing call, events on transfer/approve/mint/burn, `TokenError` enum (`AlreadyInitialized`, `NotInitialized`, `InsufficientBalance`, `InsufficientAllowance`, `Unauthorized`, `InvalidAmount`) — **9 tests passing**
+- `escrow/` template: real milestone escrow contract (`initialize`, `fund`, `mark_delivered`, `approve_milestone`, `raise_dispute`, `resolve_dispute`, `get_job`), backed by real cross-contract token transfers via `soroban_sdk::token::Client` (escrow holds funds at its own contract address between `fund` and release), `require_auth()` on every function, `EscrowError` enum (`AlreadyInitialized`, `NotInitialized`, `AlreadyFunded`, `NotFunded`, `Unauthorized`, `InvalidMilestone`, `InvalidStatus`) — **7 tests passing**, using `env.register_stellar_asset_contract_v2()` to deploy a real SAC test token per test (not a mock)
+- Copied the existing, already-verified `Cargo.lock.template` from `basic/` to both `token/` and `escrow/` (same dependency tree — both declare the identical `testutils` dev-dependency)
+- All three templates now compile and test cleanly with `--locked`: **basic 5/5, token 9/9, escrow 7/7 — 21 tests total**
+
+### How this was verified (not just written and assumed correct)
+- Every function was written, then iterated against the real pinned `soroban-sdk` 22.0.11 compiler in a scratch directory (`cargo test`) until clean — not guessed from memory. Both contracts compiled and passed all tests on the first real attempt once the exact API shapes were confirmed (`token::Client`/`token::StellarAssetClient` generated via `#[contractclient]`, `env.register_stellar_asset_contract_v2(admin) -> StellarAssetContract`, found by reading the actual crate source under `~/.cargo/registry`, not recalled from training data)
+- Verified `cargo build --target wasm32-unknown-unknown` (the actual deployable artifact) for both contracts, not just native `cargo test`
+- Re-verified the final committed template files by rendering them through the same `sed`-based pipeline CI uses (not just the scratch dev copies) and running `cargo test --locked --manifest-path` against each rendered project
+
+### Known issues
+- None. All 21 tests pass with `--locked`, no manual `cargo update`/pinning needed.
+
+### Next session
+- Add a `--template` flag to the CLI so users can choose `basic`/`token`/`escrow` at `sorokit init` time (currently hardcoded to `basic`)
+- Make the CLI's template path configurable instead of a hardcoded sibling-repo path
+- Periodically regenerate all three `Cargo.lock.template` files against newer `soroban-sdk` releases

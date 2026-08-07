@@ -1,15 +1,278 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Env};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, Vec};
+
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MilestoneStatus {
+    Pending,
+    Delivered,
+    Released,
+    Disputed,
+    Refunded,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct Milestone {
+    pub amount: i128,
+    pub status: MilestoneStatus,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct Job {
+    pub client: Address,
+    pub freelancer: Address,
+    pub arbiter: Address,
+    pub token: Address,
+    pub funded: bool,
+    pub milestones: Vec<Milestone>,
+}
+
+#[contracttype]
+#[derive(Clone)]
+enum DataKey {
+    Job,
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum EscrowError {
+    AlreadyInitialized = 1,
+    NotInitialized = 2,
+    AlreadyFunded = 3,
+    NotFunded = 4,
+    Unauthorized = 5,
+    InvalidMilestone = 6,
+    InvalidStatus = 7,
+}
+
+fn read_job(env: &Env) -> Result<Job, EscrowError> {
+    env.storage()
+        .instance()
+        .get(&DataKey::Job)
+        .ok_or(EscrowError::NotInitialized)
+}
+
+fn write_job(env: &Env, job: &Job) {
+    env.storage().instance().set(&DataKey::Job, job);
+}
 
 #[contract]
 pub struct EscrowContract;
 
 #[contractimpl]
 impl EscrowContract {
-    // TODO: Implement escrow with deposits, milestones, releases, and disputes
-    // (Based on Milestone Escrow patterns)
-    pub fn initialize(_env: Env) {
-        unimplemented!();
+    pub fn initialize(
+        env: Env,
+        client: Address,
+        freelancer: Address,
+        arbiter: Address,
+        token: Address,
+        milestone_amounts: Vec<i128>,
+    ) -> Result<(), EscrowError> {
+        if env.storage().instance().has(&DataKey::Job) {
+            return Err(EscrowError::AlreadyInitialized);
+        }
+        if milestone_amounts.is_empty() {
+            return Err(EscrowError::InvalidMilestone);
+        }
+        for amount in milestone_amounts.iter() {
+            if amount <= 0 {
+                return Err(EscrowError::InvalidMilestone);
+            }
+        }
+
+        client.require_auth();
+
+        let mut milestones = Vec::new(&env);
+        for amount in milestone_amounts.iter() {
+            milestones.push_back(Milestone {
+                amount,
+                status: MilestoneStatus::Pending,
+            });
+        }
+
+        let job = Job {
+            client,
+            freelancer,
+            arbiter,
+            token,
+            funded: false,
+            milestones,
+        };
+        write_job(&env, &job);
+
+        Ok(())
+    }
+
+    pub fn fund(env: Env, client: Address) -> Result<(), EscrowError> {
+        let mut job = read_job(&env)?;
+        if job.client != client {
+            return Err(EscrowError::Unauthorized);
+        }
+        if job.funded {
+            return Err(EscrowError::AlreadyFunded);
+        }
+        client.require_auth();
+
+        let mut total: i128 = 0;
+        for milestone in job.milestones.iter() {
+            total += milestone.amount;
+        }
+
+        let token_client = token::Client::new(&env, &job.token);
+        token_client.transfer(&client, &env.current_contract_address(), &total);
+
+        job.funded = true;
+        write_job(&env, &job);
+
+        env.events().publish((symbol_short!("funded"), client), total);
+
+        Ok(())
+    }
+
+    pub fn mark_delivered(
+        env: Env,
+        freelancer: Address,
+        milestone_index: u32,
+    ) -> Result<(), EscrowError> {
+        let mut job = read_job(&env)?;
+        if job.freelancer != freelancer {
+            return Err(EscrowError::Unauthorized);
+        }
+        if !job.funded {
+            return Err(EscrowError::NotFunded);
+        }
+        freelancer.require_auth();
+
+        if milestone_index >= job.milestones.len() {
+            return Err(EscrowError::InvalidMilestone);
+        }
+        let mut milestone = job.milestones.get(milestone_index).unwrap();
+        if milestone.status != MilestoneStatus::Pending {
+            return Err(EscrowError::InvalidStatus);
+        }
+        milestone.status = MilestoneStatus::Delivered;
+        job.milestones.set(milestone_index, milestone);
+        write_job(&env, &job);
+
+        env.events()
+            .publish((symbol_short!("delivered"), freelancer), milestone_index);
+
+        Ok(())
+    }
+
+    pub fn approve_milestone(
+        env: Env,
+        client: Address,
+        milestone_index: u32,
+    ) -> Result<(), EscrowError> {
+        let mut job = read_job(&env)?;
+        if job.client != client {
+            return Err(EscrowError::Unauthorized);
+        }
+        client.require_auth();
+
+        if milestone_index >= job.milestones.len() {
+            return Err(EscrowError::InvalidMilestone);
+        }
+        let mut milestone = job.milestones.get(milestone_index).unwrap();
+        if milestone.status != MilestoneStatus::Delivered {
+            return Err(EscrowError::InvalidStatus);
+        }
+
+        let token_client = token::Client::new(&env, &job.token);
+        token_client.transfer(
+            &env.current_contract_address(),
+            &job.freelancer,
+            &milestone.amount,
+        );
+
+        milestone.status = MilestoneStatus::Released;
+        job.milestones.set(milestone_index, milestone.clone());
+        write_job(&env, &job);
+
+        env.events().publish(
+            (symbol_short!("released"), job.freelancer.clone()),
+            (milestone_index, milestone.amount),
+        );
+
+        Ok(())
+    }
+
+    pub fn raise_dispute(env: Env, caller: Address, milestone_index: u32) -> Result<(), EscrowError> {
+        let mut job = read_job(&env)?;
+        if caller != job.client && caller != job.freelancer {
+            return Err(EscrowError::Unauthorized);
+        }
+        caller.require_auth();
+
+        if milestone_index >= job.milestones.len() {
+            return Err(EscrowError::InvalidMilestone);
+        }
+        let mut milestone = job.milestones.get(milestone_index).unwrap();
+        if milestone.status != MilestoneStatus::Delivered && milestone.status != MilestoneStatus::Pending
+        {
+            return Err(EscrowError::InvalidStatus);
+        }
+        milestone.status = MilestoneStatus::Disputed;
+        job.milestones.set(milestone_index, milestone);
+        write_job(&env, &job);
+
+        env.events()
+            .publish((symbol_short!("disputed"), caller), milestone_index);
+
+        Ok(())
+    }
+
+    pub fn resolve_dispute(
+        env: Env,
+        arbiter: Address,
+        milestone_index: u32,
+        release_to_freelancer: bool,
+    ) -> Result<(), EscrowError> {
+        let mut job = read_job(&env)?;
+        if job.arbiter != arbiter {
+            return Err(EscrowError::Unauthorized);
+        }
+        arbiter.require_auth();
+
+        if milestone_index >= job.milestones.len() {
+            return Err(EscrowError::InvalidMilestone);
+        }
+        let mut milestone = job.milestones.get(milestone_index).unwrap();
+        if milestone.status != MilestoneStatus::Disputed {
+            return Err(EscrowError::InvalidStatus);
+        }
+
+        let token_client = token::Client::new(&env, &job.token);
+        let recipient = if release_to_freelancer {
+            job.freelancer.clone()
+        } else {
+            job.client.clone()
+        };
+        token_client.transfer(&env.current_contract_address(), &recipient, &milestone.amount);
+
+        milestone.status = if release_to_freelancer {
+            MilestoneStatus::Released
+        } else {
+            MilestoneStatus::Refunded
+        };
+        job.milestones.set(milestone_index, milestone.clone());
+        write_job(&env, &job);
+
+        env.events().publish(
+            (symbol_short!("resolved"), recipient),
+            (milestone_index, milestone.amount),
+        );
+
+        Ok(())
+    }
+
+    pub fn get_job(env: Env) -> Result<Job, EscrowError> {
+        read_job(&env)
     }
 }
 

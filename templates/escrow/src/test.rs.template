@@ -1,8 +1,220 @@
 use super::*;
-use soroban_sdk::Env;
+use soroban_sdk::testutils::Address as _;
+use soroban_sdk::vec;
+
+fn create_token<'a>(env: &Env, admin: &Address) -> (Address, token::StellarAssetClient<'a>, token::Client<'a>) {
+    let sac = env.register_stellar_asset_contract_v2(admin.clone());
+    let address = sac.address();
+    let asset_client = token::StellarAssetClient::new(env, &address);
+    let token_client = token::Client::new(env, &address);
+    (address, asset_client, token_client)
+}
+
+fn setup(env: &Env) -> (Address, EscrowContractClient<'static>) {
+    let contract_id = env.register(EscrowContract, ());
+    let client = EscrowContractClient::new(env, &contract_id);
+    (contract_id, client)
+}
+
+struct Parties {
+    client: Address,
+    freelancer: Address,
+    arbiter: Address,
+}
+
+fn init_job(
+    env: &Env,
+    escrow: &EscrowContractClient,
+    parties: &Parties,
+    token: &Address,
+    amounts: &[i128],
+) {
+    let mut milestone_amounts = vec![env];
+    for amount in amounts {
+        milestone_amounts.push_back(*amount);
+    }
+    escrow.initialize(
+        &parties.client,
+        &parties.freelancer,
+        &parties.arbiter,
+        token,
+        &milestone_amounts,
+    );
+}
 
 #[test]
-fn test_escrow_stub() {
-    // TODO: Implement escrow contract tests
-    let _env = Env::default();
+fn test_happy_path_full_flow() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, escrow) = setup(&env);
+
+    let parties = Parties {
+        client: Address::generate(&env),
+        freelancer: Address::generate(&env),
+        arbiter: Address::generate(&env),
+    };
+    let token_admin = Address::generate(&env);
+    let (token_address, asset_client, token_client) = create_token(&env, &token_admin);
+    asset_client.mint(&parties.client, &1000);
+
+    init_job(&env, &escrow, &parties, &token_address, &[600, 400]);
+
+    escrow.fund(&parties.client);
+    assert_eq!(token_client.balance(&parties.client), 0);
+
+    escrow.mark_delivered(&parties.freelancer, &0);
+    escrow.approve_milestone(&parties.client, &0);
+    assert_eq!(token_client.balance(&parties.freelancer), 600);
+
+    escrow.mark_delivered(&parties.freelancer, &1);
+    escrow.approve_milestone(&parties.client, &1);
+    assert_eq!(token_client.balance(&parties.freelancer), 1000);
+
+    let job = escrow.get_job();
+    assert_eq!(job.milestones.get(0).unwrap().status, MilestoneStatus::Released);
+    assert_eq!(job.milestones.get(1).unwrap().status, MilestoneStatus::Released);
+}
+
+#[test]
+fn test_dispute_resolved_in_freelancers_favor() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, escrow) = setup(&env);
+
+    let parties = Parties {
+        client: Address::generate(&env),
+        freelancer: Address::generate(&env),
+        arbiter: Address::generate(&env),
+    };
+    let token_admin = Address::generate(&env);
+    let (token_address, asset_client, token_client) = create_token(&env, &token_admin);
+    asset_client.mint(&parties.client, &500);
+
+    init_job(&env, &escrow, &parties, &token_address, &[500]);
+    escrow.fund(&parties.client);
+    escrow.mark_delivered(&parties.freelancer, &0);
+    escrow.raise_dispute(&parties.client, &0);
+    escrow.resolve_dispute(&parties.arbiter, &0, &true);
+
+    assert_eq!(token_client.balance(&parties.freelancer), 500);
+    let job = escrow.get_job();
+    assert_eq!(job.milestones.get(0).unwrap().status, MilestoneStatus::Released);
+}
+
+#[test]
+fn test_dispute_resolved_in_clients_favor_refund() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, escrow) = setup(&env);
+
+    let parties = Parties {
+        client: Address::generate(&env),
+        freelancer: Address::generate(&env),
+        arbiter: Address::generate(&env),
+    };
+    let token_admin = Address::generate(&env);
+    let (token_address, asset_client, token_client) = create_token(&env, &token_admin);
+    asset_client.mint(&parties.client, &500);
+
+    init_job(&env, &escrow, &parties, &token_address, &[500]);
+    escrow.fund(&parties.client);
+    escrow.mark_delivered(&parties.freelancer, &0);
+    escrow.raise_dispute(&parties.freelancer, &0);
+    escrow.resolve_dispute(&parties.arbiter, &0, &false);
+
+    assert_eq!(token_client.balance(&parties.client), 500);
+    assert_eq!(token_client.balance(&parties.freelancer), 0);
+    let job = escrow.get_job();
+    assert_eq!(job.milestones.get(0).unwrap().status, MilestoneStatus::Refunded);
+}
+
+#[test]
+fn test_double_initialize_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, escrow) = setup(&env);
+
+    let parties = Parties {
+        client: Address::generate(&env),
+        freelancer: Address::generate(&env),
+        arbiter: Address::generate(&env),
+    };
+    let token_admin = Address::generate(&env);
+    let (token_address, _asset_client, _token_client) = create_token(&env, &token_admin);
+
+    init_job(&env, &escrow, &parties, &token_address, &[100]);
+
+    let mut milestone_amounts = vec![&env];
+    milestone_amounts.push_back(100i128);
+    let result = escrow.try_initialize(
+        &parties.client,
+        &parties.freelancer,
+        &parties.arbiter,
+        &token_address,
+        &milestone_amounts,
+    );
+    assert_eq!(result, Err(Ok(EscrowError::AlreadyInitialized)));
+}
+
+#[test]
+fn test_unauthorized_fund_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, escrow) = setup(&env);
+
+    let parties = Parties {
+        client: Address::generate(&env),
+        freelancer: Address::generate(&env),
+        arbiter: Address::generate(&env),
+    };
+    let token_admin = Address::generate(&env);
+    let (token_address, _asset_client, _token_client) = create_token(&env, &token_admin);
+
+    init_job(&env, &escrow, &parties, &token_address, &[100]);
+
+    let stranger = Address::generate(&env);
+    let result = escrow.try_fund(&stranger);
+    assert_eq!(result, Err(Ok(EscrowError::Unauthorized)));
+}
+
+#[test]
+fn test_mark_delivered_before_funded_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, escrow) = setup(&env);
+
+    let parties = Parties {
+        client: Address::generate(&env),
+        freelancer: Address::generate(&env),
+        arbiter: Address::generate(&env),
+    };
+    let token_admin = Address::generate(&env);
+    let (token_address, _asset_client, _token_client) = create_token(&env, &token_admin);
+
+    init_job(&env, &escrow, &parties, &token_address, &[100]);
+
+    let result = escrow.try_mark_delivered(&parties.freelancer, &0);
+    assert_eq!(result, Err(Ok(EscrowError::NotFunded)));
+}
+
+#[test]
+fn test_approve_on_non_delivered_milestone_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, escrow) = setup(&env);
+
+    let parties = Parties {
+        client: Address::generate(&env),
+        freelancer: Address::generate(&env),
+        arbiter: Address::generate(&env),
+    };
+    let token_admin = Address::generate(&env);
+    let (token_address, asset_client, _token_client) = create_token(&env, &token_admin);
+    asset_client.mint(&parties.client, &100);
+
+    init_job(&env, &escrow, &parties, &token_address, &[100]);
+    escrow.fund(&parties.client);
+
+    let result = escrow.try_approve_milestone(&parties.client, &0);
+    assert_eq!(result, Err(Ok(EscrowError::InvalidStatus)));
 }

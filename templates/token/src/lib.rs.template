@@ -1,14 +1,255 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, Env};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String};
+
+#[contracttype]
+#[derive(Clone)]
+enum DataKey {
+    Admin,
+    Name,
+    Symbol,
+    Decimals,
+    TotalSupply,
+    Balance(Address),
+    Allowance(Address, Address),
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum TokenError {
+    AlreadyInitialized = 1,
+    NotInitialized = 2,
+    InsufficientBalance = 3,
+    InsufficientAllowance = 4,
+    Unauthorized = 5,
+    InvalidAmount = 6,
+}
+
+fn check_initialized(env: &Env) -> Result<(), TokenError> {
+    if !env.storage().instance().has(&DataKey::Admin) {
+        return Err(TokenError::NotInitialized);
+    }
+    Ok(())
+}
+
+fn read_balance(env: &Env, addr: &Address) -> i128 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Balance(addr.clone()))
+        .unwrap_or(0)
+}
+
+fn write_balance(env: &Env, addr: &Address, amount: i128) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::Balance(addr.clone()), &amount);
+}
+
+fn read_allowance(env: &Env, owner: &Address, spender: &Address) -> i128 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Allowance(owner.clone(), spender.clone()))
+        .unwrap_or(0)
+}
+
+fn write_allowance(env: &Env, owner: &Address, spender: &Address, amount: i128) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::Allowance(owner.clone(), spender.clone()), &amount);
+}
 
 #[contract]
 pub struct TokenContract;
 
 #[contractimpl]
 impl TokenContract {
-    // TODO: Implement token interface (initialize, mint, burn, transfer, etc.)
-    pub fn initialize(_env: Env) {
-        unimplemented!();
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        name: String,
+        symbol: String,
+        decimals: u32,
+        initial_supply: i128,
+    ) -> Result<(), TokenError> {
+        if env.storage().instance().has(&DataKey::Admin) {
+            return Err(TokenError::AlreadyInitialized);
+        }
+        if initial_supply < 0 {
+            return Err(TokenError::InvalidAmount);
+        }
+
+        admin.require_auth();
+
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Name, &name);
+        env.storage().instance().set(&DataKey::Symbol, &symbol);
+        env.storage().instance().set(&DataKey::Decimals, &decimals);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalSupply, &initial_supply);
+
+        if initial_supply > 0 {
+            write_balance(&env, &admin, initial_supply);
+            env.events()
+                .publish((symbol_short!("mint"), admin.clone()), initial_supply);
+        }
+
+        Ok(())
+    }
+
+    pub fn mint(env: Env, admin: Address, to: Address, amount: i128) -> Result<(), TokenError> {
+        check_initialized(&env)?;
+        if amount <= 0 {
+            return Err(TokenError::InvalidAmount);
+        }
+
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != stored_admin {
+            return Err(TokenError::Unauthorized);
+        }
+        admin.require_auth();
+
+        let balance = read_balance(&env, &to);
+        write_balance(&env, &to, balance + amount);
+
+        let total_supply: i128 = env.storage().instance().get(&DataKey::TotalSupply).unwrap();
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalSupply, &(total_supply + amount));
+
+        env.events().publish((symbol_short!("mint"), to), amount);
+
+        Ok(())
+    }
+
+    pub fn transfer(env: Env, from: Address, to: Address, amount: i128) -> Result<(), TokenError> {
+        check_initialized(&env)?;
+        if amount <= 0 {
+            return Err(TokenError::InvalidAmount);
+        }
+        from.require_auth();
+
+        let from_balance = read_balance(&env, &from);
+        if from_balance < amount {
+            return Err(TokenError::InsufficientBalance);
+        }
+
+        write_balance(&env, &from, from_balance - amount);
+        let to_balance = read_balance(&env, &to);
+        write_balance(&env, &to, to_balance + amount);
+
+        env.events()
+            .publish((symbol_short!("transfer"), from, to), amount);
+
+        Ok(())
+    }
+
+    pub fn approve(
+        env: Env,
+        owner: Address,
+        spender: Address,
+        amount: i128,
+    ) -> Result<(), TokenError> {
+        check_initialized(&env)?;
+        if amount < 0 {
+            return Err(TokenError::InvalidAmount);
+        }
+        owner.require_auth();
+
+        write_allowance(&env, &owner, &spender, amount);
+
+        env.events()
+            .publish((symbol_short!("approve"), owner, spender), amount);
+
+        Ok(())
+    }
+
+    pub fn allowance(env: Env, owner: Address, spender: Address) -> i128 {
+        read_allowance(&env, &owner, &spender)
+    }
+
+    pub fn transfer_from(
+        env: Env,
+        spender: Address,
+        from: Address,
+        to: Address,
+        amount: i128,
+    ) -> Result<(), TokenError> {
+        check_initialized(&env)?;
+        if amount <= 0 {
+            return Err(TokenError::InvalidAmount);
+        }
+        spender.require_auth();
+
+        let allowance = read_allowance(&env, &from, &spender);
+        if allowance < amount {
+            return Err(TokenError::InsufficientAllowance);
+        }
+
+        let from_balance = read_balance(&env, &from);
+        if from_balance < amount {
+            return Err(TokenError::InsufficientBalance);
+        }
+
+        write_allowance(&env, &from, &spender, allowance - amount);
+        write_balance(&env, &from, from_balance - amount);
+        let to_balance = read_balance(&env, &to);
+        write_balance(&env, &to, to_balance + amount);
+
+        env.events()
+            .publish((symbol_short!("transfer"), from, to), amount);
+
+        Ok(())
+    }
+
+    pub fn burn(env: Env, from: Address, amount: i128) -> Result<(), TokenError> {
+        check_initialized(&env)?;
+        if amount <= 0 {
+            return Err(TokenError::InvalidAmount);
+        }
+        from.require_auth();
+
+        let balance = read_balance(&env, &from);
+        if balance < amount {
+            return Err(TokenError::InsufficientBalance);
+        }
+
+        write_balance(&env, &from, balance - amount);
+
+        let total_supply: i128 = env.storage().instance().get(&DataKey::TotalSupply).unwrap();
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalSupply, &(total_supply - amount));
+
+        env.events().publish((symbol_short!("burn"), from), amount);
+
+        Ok(())
+    }
+
+    pub fn balance(env: Env, address: Address) -> i128 {
+        read_balance(&env, &address)
+    }
+
+    pub fn total_supply(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::TotalSupply)
+            .unwrap_or(0)
+    }
+
+    pub fn name(env: Env) -> String {
+        env.storage().instance().get(&DataKey::Name).unwrap()
+    }
+
+    pub fn symbol(env: Env) -> String {
+        env.storage().instance().get(&DataKey::Symbol).unwrap()
+    }
+
+    pub fn decimals(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::Decimals)
+            .unwrap_or(0)
     }
 }
 

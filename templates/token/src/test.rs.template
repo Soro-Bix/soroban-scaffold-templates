@@ -1,8 +1,168 @@
 use super::*;
-use soroban_sdk::Env;
+use soroban_sdk::testutils::Address as _;
+
+fn setup(env: &Env) -> (Address, TokenContractClient<'static>) {
+    let contract_id = env.register(TokenContract, ());
+    let client = TokenContractClient::new(env, &contract_id);
+    (contract_id, client)
+}
+
+fn init_token(env: &Env, client: &TokenContractClient, admin: &Address, initial_supply: i128) {
+    client.initialize(
+        admin,
+        &String::from_str(env, "Example Token"),
+        &String::from_str(env, "EXT"),
+        &7,
+        &initial_supply,
+    );
+}
 
 #[test]
-fn test_token_stub() {
-    // TODO: Implement token contract tests
-    let _env = Env::default();
+fn test_initialize_sets_metadata_and_supply() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+
+    init_token(&env, &client, &admin, 1_000_000);
+
+    assert_eq!(client.name(), String::from_str(&env, "Example Token"));
+    assert_eq!(client.symbol(), String::from_str(&env, "EXT"));
+    assert_eq!(client.decimals(), 7);
+    assert_eq!(client.total_supply(), 1_000_000);
+}
+
+#[test]
+fn test_balance_after_mint() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+
+    init_token(&env, &client, &admin, 0);
+    client.mint(&admin, &user, &500);
+
+    assert_eq!(client.balance(&user), 500);
+    assert_eq!(client.total_supply(), 500);
+}
+
+#[test]
+fn test_transfer_moves_funds() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    init_token(&env, &client, &admin, 0);
+    client.mint(&admin, &alice, &1000);
+
+    client.transfer(&alice, &bob, &300);
+
+    assert_eq!(client.balance(&alice), 700);
+    assert_eq!(client.balance(&bob), 300);
+}
+
+#[test]
+fn test_transfer_fails_with_insufficient_balance() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    init_token(&env, &client, &admin, 0);
+    client.mint(&admin, &alice, &100);
+
+    let result = client.try_transfer(&alice, &bob, &500);
+    assert_eq!(result, Err(Ok(TokenError::InsufficientBalance)));
+}
+
+#[test]
+fn test_approve_sets_allowance() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let spender = Address::generate(&env);
+
+    init_token(&env, &client, &admin, 0);
+    client.approve(&owner, &spender, &250);
+
+    assert_eq!(client.allowance(&owner, &spender), 250);
+}
+
+#[test]
+fn test_transfer_from_uses_allowance() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let spender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    init_token(&env, &client, &admin, 0);
+    client.mint(&admin, &owner, &1000);
+    client.approve(&owner, &spender, &400);
+
+    client.transfer_from(&spender, &owner, &recipient, &400);
+
+    assert_eq!(client.balance(&owner), 600);
+    assert_eq!(client.balance(&recipient), 400);
+    assert_eq!(client.allowance(&owner, &spender), 0);
+}
+
+#[test]
+fn test_transfer_from_fails_with_insufficient_allowance() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let spender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    init_token(&env, &client, &admin, 0);
+    client.mint(&admin, &owner, &1000);
+    client.approve(&owner, &spender, &100);
+
+    let result = client.try_transfer_from(&spender, &owner, &recipient, &200);
+    assert_eq!(result, Err(Ok(TokenError::InsufficientAllowance)));
+}
+
+#[test]
+fn test_burn_reduces_balance_and_supply() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+
+    init_token(&env, &client, &admin, 0);
+    client.mint(&admin, &user, &1000);
+
+    client.burn(&user, &400);
+
+    assert_eq!(client.balance(&user), 600);
+    assert_eq!(client.total_supply(), 600);
+}
+
+#[test]
+fn test_unauthorized_mint_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let not_admin = Address::generate(&env);
+    let user = Address::generate(&env);
+
+    init_token(&env, &client, &admin, 0);
+
+    let result = client.try_mint(&not_admin, &user, &1000);
+    assert_eq!(result, Err(Ok(TokenError::Unauthorized)));
 }
