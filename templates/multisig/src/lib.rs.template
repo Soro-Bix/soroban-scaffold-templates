@@ -1,0 +1,127 @@
+#![no_std]
+use soroban_sdk::{{contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec, Map}};
+
+#[contracttype]
+#[derive(Clone)]
+enum DataKey {{
+    Threshold,
+    Owners,
+    OwnerCount,
+    Nonce,
+    Transaction(u64),
+}}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct Transaction {{
+    pub destination: Address,
+    pub amount: i128,
+    pub executed: bool,
+    pub approvals: Map<Address, bool>,
+}}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum MultisigError {{
+    AlreadyInitialized = 1,
+    NotInitialized = 2,
+    Unauthorized = 3,
+    InvalidThreshold = 4,
+    DuplicateOwner = 5,
+    TransactionNotFound = 6,
+    AlreadyApproved = 7,
+    AlreadyExecuted = 8,
+    ThresholdNotMet = 9,
+}}
+
+fn check_initialized(env: &Env) -> Result<(), MultisigError> {{
+    if !env.storage().instance().has(&DataKey::Threshold) {{
+        return Err(MultisigError::NotInitialized);
+    }}
+    Ok(())
+}}
+
+fn check_owner(env: &Env, addr: &Address) -> Result<(), MultisigError> {{
+    let owners: Vec<Address> = env.storage().instance().get(&DataKey::Owners).unwrap_or(Vec::new(&env));
+    if !owners.contains(addr) {{
+        return Err(MultisigError::Unauthorized);
+    }}
+    Ok(())
+}}
+
+#[contract]
+pub struct MultisigContract;
+
+#[contractimpl]
+impl MultisigContract {{
+    pub fn initialize(env: Env, owners: Vec<Address>, threshold: u32) -> Result<(), MultisigError> {{
+        if env.storage().instance().has(&DataKey::Threshold) {{
+            return Err(MultisigError::AlreadyInitialized);
+        }}
+        if threshold == 0 || threshold > owners.len() as u32 {{
+            return Err(MultisigError::InvalidThreshold);
+        }}
+        env.storage().instance().set(&DataKey::Threshold, &threshold);
+        env.storage().instance().set(&DataKey::Owners, &owners);
+        env.storage().instance().set(&DataKey::OwnerCount, &(owners.len() as u32));
+        env.storage().instance().set(&DataKey::Nonce, &0u64);
+        Ok(())
+    }}
+
+    pub fn threshold(env: Env) -> Result<u32, MultisigError> {{
+        check_initialized(&env)?;
+        Ok(env.storage().instance().get(&DataKey::Threshold).unwrap())
+    }}
+
+    pub fn get_owners(env: Env) -> Result<Vec<Address>, MultisigError> {{
+        check_initialized(&env)?;
+        Ok(env.storage().instance().get(&DataKey::Owners).unwrap_or(Vec::new(&env)))
+    }}
+
+    pub fn submit(env: Env, destination: Address, amount: i128) -> Result<u64, MultisigError> {{
+        check_initialized(&env)?;
+        let nonce: u64 = env.storage().instance().get(&DataKey::Nonce).unwrap_or(0);
+        let tx_id = nonce + 1;
+        let approvals: Map<Address, bool> = Map::new(&env);
+        let tx = Transaction {{
+            destination,
+            amount,
+            executed: false,
+            approvals,
+        }};
+        env.storage().instance().set(&DataKey::Nonce, &tx_id);
+        env.storage().persistent().set(&DataKey::Transaction(tx_id), &tx);
+        env.events().publish((symbol_short!("submit"),), tx_id);
+        Ok(tx_id)
+    }}
+
+    pub fn approve(env: Env, owner: Address, tx_id: u64) -> Result<(), MultisigError> {{
+        check_initialized(&env)?;
+        check_owner(&env, &owner)?;
+        owner.require_auth();
+        let mut tx: Transaction = env.storage().persistent().get(&DataKey::Transaction(tx_id))
+            .ok_or(MultisigError::TransactionNotFound)?;
+        if tx.executed {{
+            return Err(MultisigError::AlreadyExecuted);
+        }}
+        if tx.approvals.get(owner.clone()).unwrap_or(false) {{
+            return Err(MultisigError::AlreadyApproved);
+        }}
+        tx.approvals.set(owner.clone(), true);
+        let threshold: u32 = env.storage().instance().get(&DataKey::Threshold).unwrap();
+        if tx.approvals.len() >= threshold {{
+            tx.executed = true;
+        }}
+        env.storage().persistent().set(&DataKey::Transaction(tx_id), &tx);
+        env.events().publish((symbol_short!("approve"),), (tx_id, owner));
+        Ok(())
+    }}
+
+    pub fn is_executed(env: Env, tx_id: u64) -> Result<bool, MultisigError> {{
+        check_initialized(&env)?;
+        let tx: Transaction = env.storage().persistent().get(&DataKey::Transaction(tx_id))
+            .ok_or(MultisigError::TransactionNotFound)?;
+        Ok(tx.executed)
+    }}
+}}
