@@ -8,9 +8,9 @@ This repository contains the Soroban smart contract templates that `sorobix init
 
 ### basic — Counter Contract
 A minimal Soroban contract implementing a simple counter with increment, decrement, and get functions. Ideal starting point for developers new to Soroban.
-- **Tests**: 5 passing
-- **Functions**: increment(), decrement(), get_count(), reset()
-- **Events**: emitted on every state change
+- **Tests**: 7 passing
+- **Functions**: initialize(admin), increment(), decrement(), get_count(), reset(admin)
+- **Events**: emitted on every state change (increment, decrement, reset)
 
 ### token — SEP-41 Fungible Token
 A fully SEP-41 compliant fungible token contract compatible with Stellar wallets, DEXes, and other Soroban contracts.
@@ -30,7 +30,7 @@ Every template is compiled, wasm32-built, and tested on every push via a 3-way C
 
 | Template | Build | WASM | Tests |
 |---|---|---|---|
-| basic | ✅ | ✅ | 5/5 |
+| basic | ✅ | ✅ | 7/7 |
 | token | ✅ | ✅ | 9/9 |
 | escrow | ✅ | ✅ | 7/7 |
 
