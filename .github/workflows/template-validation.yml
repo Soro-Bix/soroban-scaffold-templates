@@ -1,0 +1,42 @@
+name: Template Validation
+
+on:
+  push:
+    paths:
+      - 'templates/**'
+  pull_request:
+    paths:
+      - 'templates/**'
+
+jobs:
+  validate-templates:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        template:
+          - token
+          - nft
+          - multisig
+          - timelock
+          - vesting
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+
+      - name: Install Soroban CLI
+        run: cargo install soroban-cli --version 20.3.0
+
+      - name: Build ${{ matrix.template }} template
+        run: |
+          cd templates/${{ matrix.template }}
+          cargo build --target wasm32-unknown-unknown --release
+
+      - name: Test ${{ matrix.template }} template
+        run: |
+          cd templates/${{ matrix.template }}
+          cargo test
