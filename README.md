@@ -1,42 +1,65 @@
 # Soroban Scaffold Templates
 
-This repository contains the contract templates used by the [Soroban Scaffold CLI](https://github.com/Soro-Bix/soroban-scaffold).
+> Contract templates used by the [Sorobix CLI](https://github.com/Soro-Bix/soroban-scaffold).
 
-When you run `sorobix init my-project`, the CLI copies and renders one of these templates into your new project directory.
+This repository contains the Soroban smart contract templates that `sorobix init` generates from. Each template is a real, working, tested Soroban contract — not pseudo-code or stubs.
 
-## Available Templates
+## Templates
 
-| Template   | Path              | Description                                                    | Status       |
-|------------|-------------------|----------------------------------------------------------------|--------------|
-| `basic`    | `templates/basic/` | Minimal counter contract — great for learning Soroban basics   | ✅ Complete   |
-| `token`    | `templates/token/` | Standard token contract implementing the Soroban token interface | 🚧 Stub only |
-| `escrow`   | `templates/escrow/` | Milestone-based escrow (from Milestone Escrow patterns)        | 🚧 Stub only |
+### basic — Counter Contract
+A minimal Soroban contract implementing a simple counter with increment, decrement, and get functions. Ideal starting point for developers new to Soroban.
+- **Tests**: 5 passing
+- **Functions**: increment(), decrement(), get_count(), reset()
+- **Events**: emitted on every state change
 
-## How Templates Work
+### token — SEP-41 Fungible Token
+A fully SEP-41 compliant fungible token contract compatible with Stellar wallets, DEXes, and other Soroban contracts.
+- **Tests**: 9 passing
+- **Functions**: initialize(), mint(), transfer(), transfer_from(), approve(), allowance(), balance(), total_supply(), burn()
+- **Events**: Transfer, Approval, Mint, Burn
 
-Each template is a directory containing files with a `.template` extension.
-At generation time, the CLI:
+### escrow — Milestone-Based Escrow
+A trustless escrow contract supporting milestone-based fund release and dispute resolution — the same pattern powering [Milestone Escrow](https://github.com/Goldii-locks/escrow-contract).
+- **Tests**: 7 passing
+- **Functions**: initialize(), fund(), mark_delivered(), approve_milestone(), raise_dispute(), resolve_dispute(), get_job()
+- **Events**: emitted on every state transition
 
-1. Copies every `*.template` file into the new project
-2. Strips the `.template` suffix
-3. Substitutes template variables using Handlebars-style `{{VAR}}` syntax
+## CI
 
-### Template Variables
+Every template is compiled, wasm32-built, and tested on every push via a 3-way CI matrix:
 
-| Variable          | Example                  | Source                                   |
-|-------------------|--------------------------|------------------------------------------|
-| `{{PROJECT_NAME}}` | `my-counter`             | `sorobix init <project-name>`            |
-| `{{AUTHOR}}`       | `Jane Doe <j@example.com>` | Prompted during init, or from git config |
+| Template | Build | WASM | Tests |
+|---|---|---|---|
+| basic | ✅ | ✅ | 5/5 |
+| token | ✅ | ✅ | 9/9 |
+| escrow | ✅ | ✅ | 7/7 |
 
-## Contributing a Template
+## Adding a New Template
 
-1. Fork this repository
-2. Create `templates/<your-template-name>/`
-3. Add `Cargo.toml.template`, `src/lib.rs.template`, `src/test.rs.template`, `.gitignore.template`, `README.md.template`
-4. Use `{{PROJECT_NAME}}` and `{{AUTHOR}}` as placeholders
-5. Add an entry to the table above
-6. Open a PR with a conventional commit: `feat: add <name> template`
+See [docs/TEMPLATE_AUTHORING.md](./docs/TEMPLATE_AUTHORING.md) (coming soon — tracked in [#6](https://github.com/Soro-Bix/soroban-scaffold-templates/issues/6)) for a full guide on contributing new templates.
+
+Quick summary:
+1. Create a new directory under `templates/` with the template name
+2. Add `Cargo.toml.template`, `src/lib.rs.template`, `src/test.rs.template`, `README.md.template`
+3. Copy `Cargo.lock.template` from `templates/basic/` (required for dependency pinning)
+4. Add your template to the CI matrix in `.github/workflows/ci.yml`
+5. Open a PR — all CI legs must pass
+
+## Template Variables
+
+Templates support these variables via Handlebars substitution:
+
+| Variable | Description |
+|---|---|
+| `{{PROJECT_NAME}}` | The project name provided to `sorobix init` |
+| `{{AUTHOR}}` | The author name from `--author` flag or git config |
+
+## Contributing
+
+This project participates in the [Drips Wave Stellar contributor program](https://drips.network/wave/stellar). Open issues include new template types (NFT, multisig, timelock, vesting) and CI improvements — great opportunities for Rust/Soroban developers.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT — part of the Soro-Bix ecosystem
+MIT
