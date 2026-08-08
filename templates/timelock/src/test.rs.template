@@ -1,0 +1,58 @@
+#![cfg(test)]
+use soroban_sdk::{{testutils::Address as _, Address, Env, String}};
+use crate::{{NftContract, NftContractClient}};
+
+fn setup<'a>() -> (Env, NftContractClient<'a>) {{
+    let env = Env::default();
+    let contract_id = env.register(NftContract, ());
+    let client = NftContractClient::new(&env, &contract_id);
+    (env, client)
+}}
+
+#[test]
+fn test_initialize() {{
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let name = String::from_str(&env, "Test NFT");
+    let symbol = String::from_str(&env, "TNFT");
+    client.initialize(&admin, &name, &symbol);
+    assert_eq!(client.name(), name);
+    assert_eq!(client.symbol(), symbol);
+}}
+
+#[test]
+fn test_mint_and_owner() {{
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    let uri = String::from_str(&env, "ipfs://token-uri");
+    client.initialize(&admin, &String::from_str(&env, "NFT"), &String::from_str(&env, "N"));
+    let token_id = client.mint(&user, &uri);
+    assert_eq!(token_id, 1);
+    assert_eq!(client.owner_of(&1), user);
+    assert_eq!(client.token_uri(&1), uri);
+}}
+
+#[test]
+fn test_transfer() {{
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let user1 = Address::generate(&env);
+    let user2 = Address::generate(&env);
+    let uri = String::from_str(&env, "ipfs://test");
+    client.initialize(&admin, &String::from_str(&env, "T"), &String::from_str(&env, "T"));
+    client.mint(&user1, &uri);
+    client.transfer(&user1, &user2, &1);
+    assert_eq!(client.owner_of(&1), user2);
+}}
+
+#[test]
+fn test_balance_of() {{
+    let (env, client) = setup();
+    let admin = Address::generate(&env);
+    let user = Address::generate(&env);
+    client.initialize(&admin, &String::from_str(&env, "B"), &String::from_str(&env, "B"));
+    client.mint(&user, &String::from_str(&env, "uri1"));
+    client.mint(&user, &String::from_str(&env, "uri2"));
+    assert_eq!(client.balance_of(&user), 2);
+}}
