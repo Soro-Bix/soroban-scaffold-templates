@@ -3,7 +3,7 @@ name = "{{PROJECT_NAME}}"
 version = "0.1.0"
 edition = "2021"
 authors = ["{{AUTHOR}}"]
-description = "Soroban escrow contract - scaffolded by Sorokit"
+description = "Soroban escrow contract - scaffolded by Sorobix"
 license = "MIT"
 repository = ""
 

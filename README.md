@@ -2,7 +2,7 @@
 
 This repository contains the contract templates used by the [Soroban Scaffold CLI](https://github.com/Soro-Bix/soroban-scaffold).
 
-When you run `sorokit init my-project`, the CLI copies and renders one of these templates into your new project directory.
+When you run `sorobix init my-project`, the CLI copies and renders one of these templates into your new project directory.
 
 ## Available Templates
 
@@ -25,7 +25,7 @@ At generation time, the CLI:
 
 | Variable          | Example                  | Source                                   |
 |-------------------|--------------------------|------------------------------------------|
-| `{{PROJECT_NAME}}` | `my-counter`             | `sorokit init <project-name>`            |
+| `{{PROJECT_NAME}}` | `my-counter`             | `sorobix init <project-name>`            |
 | `{{AUTHOR}}`       | `Jane Doe <j@example.com>` | Prompted during init, or from git config |
 
 ## Contributing a Template

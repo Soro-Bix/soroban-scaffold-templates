@@ -17,7 +17,7 @@ Templates use {{PROJECT_NAME}} and {{AUTHOR}} as placeholder variables that the 
 ## Session 2 — 2026-08-05
 
 ### What was validated
-- `basic/` template validated end-to-end by the soroban-scaffold CLI: `sorokit init` now copies every file in `templates/basic/`, strips the `.template` suffix, and renders `{{PROJECT_NAME}}`/`{{AUTHOR}}` via Handlebars into `Cargo.toml`, `.gitignore`, `README.md`, `src/lib.rs`, `src/test.rs`
+- `basic/` template validated end-to-end by the soroban-scaffold CLI: `sorobix init` now copies every file in `templates/basic/`, strips the `.template` suffix, and renders `{{PROJECT_NAME}}`/`{{AUTHOR}}` via Handlebars into `Cargo.toml`, `.gitignore`, `README.md`, `src/lib.rs`, `src/test.rs`
 - Confirmed generated `Cargo.toml` and `README.md` render correctly with real project name and author values
 
 ### Next session
@@ -37,7 +37,7 @@ Templates use {{PROJECT_NAME}} and {{AUTHOR}} as placeholder variables that the 
 
 ### Known issue, not yet fixed
 - `soroban-env-host`'s `testutils` feature currently pulls in `ed25519-dalek` 3.0.0 alongside an older `ed25519-dalek` elsewhere in the dependency graph; the two disagree on which `rand_core` `CryptoRng` impl `ChaCha20Rng` satisfies, breaking `cargo test` on a fresh dependency resolve — independent of which `soroban-sdk` 22.x patch is pinned. CI works around it with `cargo update -p ed25519-dalek@3.0.0 --precise 2.2.0 || true`.
-- **This same conflict affects real end users today**: `sorokit init` scaffolds `Cargo.toml` with an unpinned `soroban-sdk = "22.0.0"` and no committed `Cargo.lock`, so a freshly generated project's first `cargo test` will very likely hit the identical failure outside of CI. Needs a real fix — e.g. the CLI committing a working `Cargo.lock` as part of scaffolding, or the template pinning `ed25519-dalek` directly — tracked as a follow-up, not yet done.
+- **This same conflict affects real end users today**: `sorobix init` scaffolds `Cargo.toml` with an unpinned `soroban-sdk = "22.0.0"` and no committed `Cargo.lock`, so a freshly generated project's first `cargo test` will very likely hit the identical failure outside of CI. Needs a real fix — e.g. the CLI committing a working `Cargo.lock` as part of scaffolding, or the template pinning `ed25519-dalek` directly — tracked as a follow-up, not yet done.
 
 ### Next session
 - Populate token/ and escrow/ templates
@@ -50,7 +50,7 @@ Templates use {{PROJECT_NAME}} and {{AUTHOR}} as placeholder variables that the 
 - Corrected org name `Soro-kiit` → `Soro-Bix` (matches the actual GitHub org) in `README.md` and all three `README.md.template` files
 - Fixed the ed25519-dalek/rand_core conflict for real generated projects, not just CI (see Session 3's "known issue"): added a pre-generated, individually verified `Cargo.lock.template` to **all three** templates (`basic`, `token`, `escrow` — not just `basic`, since all three declare the same `testutils` dev-dependency and hit the identical failure), with `{{PROJECT_NAME}}` substituted into the root package's `name` field like any other template variable. `copyTemplate` in the CLI already copies and renders arbitrary `*.template` files generically, so this required zero CLI code changes.
 - Removed `Cargo.lock` from all three `.gitignore.template` files — for a deployable smart contract (not a library), committing the lockfile is the idiomatic Rust practice, and it's the actual fix here: without it, generated projects keep re-resolving fresh and can hit the same conflict again after any dependency drift.
-- Verified via the real CLI end-to-end: `sorokit init fixed-test-project` → `cargo test` passes 5/5 with zero manual intervention (no `cargo update`, no pinning) — this is the first time the actual literal `sorokit init` → `cargo test` path has been proven to work for a real user.
+- Verified via the real CLI end-to-end: `sorobix init fixed-test-project` → `cargo test` passes 5/5 with zero manual intervention (no `cargo update`, no pinning) — this is the first time the actual literal `sorobix init` → `cargo test` path has been proven to work for a real user.
 
 ### Caveat
 - Each `Cargo.lock.template` pins the dependency graph as resolved on 2026-08-06 (`soroban-sdk` 22.0.11, `soroban-env-host` 22.1.3, `ed25519-dalek` 2.2.0). This is a snapshot, not a permanently-correct answer — it will need periodic regeneration as `soroban-sdk` releases new versions, same as any committed lockfile.
@@ -77,6 +77,6 @@ Templates use {{PROJECT_NAME}} and {{AUTHOR}} as placeholder variables that the 
 - None. All 21 tests pass with `--locked`, no manual `cargo update`/pinning needed.
 
 ### Next session
-- Add a `--template` flag to the CLI so users can choose `basic`/`token`/`escrow` at `sorokit init` time (currently hardcoded to `basic`)
+- Add a `--template` flag to the CLI so users can choose `basic`/`token`/`escrow` at `sorobix init` time (currently hardcoded to `basic`)
 - Make the CLI's template path configurable instead of a hardcoded sibling-repo path
 - Periodically regenerate all three `Cargo.lock.template` files against newer `soroban-sdk` releases
