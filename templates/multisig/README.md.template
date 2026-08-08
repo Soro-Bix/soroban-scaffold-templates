@@ -1,0 +1,28 @@
+# {{PROJECT_NAME}}
+
+A Soroban smart contract scaffolded by [Sorobix](https://github.com/Soro-Bix/soroban-scaffold).
+
+## Build
+
+```bash
+soroban contract build
+```
+
+## Test
+
+```bash
+cargo test
+```
+
+## Deploy
+
+```bash
+soroban contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/{{PROJECT_NAME}}.wasm \
+  --source ADMIN \
+  --network testnet
+```
+
+## Author
+
+{{AUTHOR}}
