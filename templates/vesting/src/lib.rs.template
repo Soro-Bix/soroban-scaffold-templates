@@ -1,0 +1,85 @@
+#![no_std]
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env};
+
+#[contracttype]
+#[derive(Clone)]
+pub enum DataKey {
+    Admin,
+    Recipient,
+    Total,
+    Claimed,
+    Start,
+    Cliff,
+    Duration,
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    Unauthorized = 1,
+    NothingToClaim = 2,
+    AlreadyInitialized = 3,
+}
+
+#[contract]
+pub struct VestingContract;
+
+#[contractimpl]
+impl VestingContract {
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        recipient: Address,
+        total: i128,
+        start: u64,
+        cliff: u64,
+        duration: u64,
+    ) -> Result<(), Error> {
+        if env.storage().instance().has(&DataKey::Admin) {
+            return Err(Error::AlreadyInitialized);
+        }
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Recipient, &recipient);
+        env.storage().instance().set(&DataKey::Total, &total);
+        env.storage().instance().set(&DataKey::Claimed, &0i128);
+        env.storage().instance().set(&DataKey::Start, &start);
+        env.storage().instance().set(&DataKey::Cliff, &cliff);
+        env.storage().instance().set(&DataKey::Duration, &duration);
+        Ok(())
+    }
+
+    fn vested_amount(env: &Env) -> i128 {
+        let total: i128 = env.storage().instance().get(&DataKey::Total).unwrap();
+        let start: u64 = env.storage().instance().get(&DataKey::Start).unwrap();
+        let cliff: u64 = env.storage().instance().get(&DataKey::Cliff).unwrap();
+        let duration: u64 = env.storage().instance().get(&DataKey::Duration).unwrap();
+        let now = env.ledger().timestamp();
+        if now < start + cliff || duration == 0 {
+            return 0;
+        }
+        let elapsed = now - start;
+        if elapsed >= duration {
+            return total;
+        }
+        total * (elapsed as i128) / (duration as i128)
+    }
+
+    pub fn claimable(env: Env) -> i128 {
+        let vested = Self::vested_amount(&env);
+        let claimed: i128 = env.storage().instance().get(&DataKey::Claimed).unwrap();
+        vested - claimed
+    }
+
+    pub fn claim(env: Env) -> Result<i128, Error> {
+        let amount = Self::claimable(env.clone());
+        if amount <= 0 {
+            return Err(Error::NothingToClaim);
+        }
+        let claimed: i128 = env.storage().instance().get(&DataKey::Claimed).unwrap();
+        env.storage().instance().set(&DataKey::Claimed, &(claimed + amount));
+        let recipient: Address = env.storage().instance().get(&DataKey::Recipient).unwrap();
+        recipient.require_auth();
+        Ok(amount)
+    }
+}
