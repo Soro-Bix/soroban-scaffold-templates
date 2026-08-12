@@ -1,0 +1,23 @@
+#![cfg(test)]
+use super::*;
+use soroban_sdk::testutils::Address as _;
+use soroban_sdk::{Address, Env};
+
+fn setup<'a>(env: &Env) -> (Address, TimelockContractClient<'a>) {
+    let admin = Address::generate(env);
+    let contract_id = env.register(TimelockContract, ());
+    let client = TimelockContractClient::new(env, &contract_id);
+    client.initialize(&admin);
+    (admin, client)
+}
+
+#[test]
+fn test_schedule_and_release_time() {
+    let env = Env::default();
+    let (_admin, client) = setup(&env);
+    env.mock_all_auths();
+    let to = Address::generate(&env);
+    let id = client.schedule(&to, &500, &1_000_000);
+    assert_eq!(client.release_time(&id).unwrap(), 1_000_000);
+    assert!(!client.is_executed(&id).unwrap());
+}
