@@ -1,0 +1,24 @@
+# {{PROJECT_NAME}}
+
+A Soroban NFT contract scaffolded by [Sorobix](https://github.com/Soro-Bix/soroban-scaffold).
+
+## Template: NFT (ERC-721 style)
+
+Minimal non-fungible token contract with:
+
+- `initialize(admin, name, symbol)`
+- `mint(to, uri)` — sequential token ids, admin-gated
+- `owner_of(id)` / `token_uri(id)` metadata lookup
+- Instance storage for collection metadata
+
+## Prerequisites
+
+- Rust 1.76+ with `wasm32-unknown-unknown` target
+- [Soroban CLI](https://developers.stellar.org/docs/build/smart-contracts/getting-started/setup)
+
+## Build
+
+```bash
+cargo build --target wasm32-unknown-unknown --release
+cargo test
+```
