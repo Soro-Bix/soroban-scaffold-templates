@@ -1,0 +1,16 @@
+# {{PROJECT_NAME}}
+
+A Soroban vesting contract scaffolded by [Sorobix](https://github.com/Soro-Bix/soroban-scaffold).
+
+## Template: Vesting (linear with cliff)
+
+- `initialize(admin, recipient, total, start, cliff, duration)`
+- `claimable()` — linearly vested amount minus already claimed
+- `claim()` — recipient withdraws the currently claimable amount
+
+## Build
+
+```bash
+cargo build --target wasm32-unknown-unknown --release
+cargo test
+```
