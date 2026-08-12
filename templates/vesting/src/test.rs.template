@@ -1,0 +1,20 @@
+#![cfg(test)]
+use super::*;
+use soroban_sdk::testutils::Address as _;
+use soroban_sdk::{Address, Env};
+
+fn setup<'a>(env: &Env) -> VestingContractClient<'a> {
+    let admin = Address::generate(env);
+    let recipient = Address::generate(env);
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(env, &contract_id);
+    client.initialize(&admin, &recipient, &1000, &100, &0, &1000).unwrap();
+    client
+}
+
+#[test]
+fn test_initial_claimable_zero() {
+    let env = Env::default();
+    let client = setup(&env);
+    assert_eq!(client.claimable(), 0);
+}
