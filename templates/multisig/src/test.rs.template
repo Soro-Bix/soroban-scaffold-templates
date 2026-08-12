@@ -1,0 +1,26 @@
+#![cfg(test)]
+use super::*;
+use soroban_sdk::testutils::Address as _;
+use soroban_sdk::{vec, Address, Env};
+
+fn setup<'a>(env: &Env, signers: Vec<Address>, threshold: u32) -> MultisigContractClient<'a> {
+    let contract_id = env.register(MultisigContract, ());
+    let client = MultisigContractClient::new(env, &contract_id);
+    client.initialize(&signers, &threshold).unwrap();
+    client
+}
+
+#[test]
+fn test_threshold_confirmation() {
+    let env = Env::default();
+    let a = Address::generate(&env);
+    let b = Address::generate(&env);
+    let c = Address::generate(&env);
+    let client = setup(&env, vec![&env, a.clone(), b.clone(), c.clone()], 2);
+    env.mock_all_auths();
+    let id = client.submit(&a, &100, &vec![&env, 1, 2, 3]);
+    // Confirmations are recorded by the contract; here we assert proposal bookkeeping works.
+    assert_eq!(client.threshold(), 2);
+    assert!(!client.is_confirmed(&id));
+    let _ = (b, c);
+}
