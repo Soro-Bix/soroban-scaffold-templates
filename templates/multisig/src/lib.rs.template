@@ -1,0 +1,77 @@
+#![no_std]
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, Vec};
+
+#[contracttype]
+#[derive(Clone)]
+pub enum DataKey {
+    Signers,
+    Threshold,
+    Nonce,
+    Confirmations(u32),
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    NotSigner = 1,
+    AlreadyConfirmed = 2,
+    UnknownProposal = 3,
+    ThresholdNotMet = 4,
+    InvalidThreshold = 5,
+}
+
+#[contract]
+pub struct MultisigContract;
+
+#[contractimpl]
+impl MultisigContract {
+    pub fn initialize(env: Env, signers: Vec<Address>, threshold: u32) -> Result<(), Error> {
+        if threshold == 0 || threshold > signers.len() {
+            return Err(Error::InvalidThreshold);
+        }
+        env.storage().instance().set(&DataKey::Signers, &signers);
+        env.storage().instance().set(&DataKey::Threshold, &threshold);
+        env.storage().instance().set(&DataKey::Nonce, &0u32);
+        Ok(())
+    }
+
+    pub fn submit(env: Env, to: Address, amount: i128, data: Vec<u32>) -> u32 {
+        let caller = env.current_contract_address();
+        let _ = caller;
+        let nonce: u32 = env.storage().instance().get(&DataKey::Nonce).unwrap_or(0);
+        let id = nonce + 1;
+        env.storage().instance().set(&DataKey::Nonce, &id);
+        env.storage().persistent().set(&DataKey::Confirmations(id), &Vec::new(&env));
+        let _ = (to, amount, data);
+        id
+    }
+
+    pub fn confirm(env: Env, id: u32) -> Result<bool, Error> {
+        let signers: Vec<Address> = env.storage().instance().get(&DataKey::Signers).unwrap();
+        let who = env.current_contract_address();
+        if !signers.contains(&who) {
+            return Err(Error::NotSigner);
+        }
+        let mut confirmations: Vec<Address> = env.storage().persistent()
+            .get(&DataKey::Confirmations(id)).unwrap_or_else(|| Vec::new(&env));
+        if confirmations.contains(&who) {
+            return Err(Error::AlreadyConfirmed);
+        }
+        confirmations.push_back(who);
+        env.storage().persistent().set(&DataKey::Confirmations(id), &confirmations);
+        let threshold: u32 = env.storage().instance().get(&DataKey::Threshold).unwrap();
+        Ok(confirmations.len() >= threshold)
+    }
+
+    pub fn is_confirmed(env: Env, id: u32) -> bool {
+        let confirmations: Vec<Address> = env.storage().persistent()
+            .get(&DataKey::Confirmations(id)).unwrap_or_else(|| Vec::new(&env));
+        let threshold: u32 = env.storage().instance().get(&DataKey::Threshold).unwrap();
+        confirmations.len() >= threshold
+    }
+
+    pub fn threshold(env: Env) -> u32 {
+        env.storage().instance().get(&DataKey::Threshold).unwrap()
+    }
+}

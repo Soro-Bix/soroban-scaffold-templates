@@ -1,0 +1,17 @@
+# {{PROJECT_NAME}}
+
+A Soroban timelock contract scaffolded by [Sorobix](https://github.com/Soro-Bix/soroban-scaffold).
+
+## Template: Timelock
+
+- `initialize(admin)`
+- `schedule(to, amount, release_time)` — admin schedules a transfer, returns id
+- `release_time(id)` / `is_executed(id)`
+- `execute(id)` — only after `release_time` has passed
+
+## Build
+
+```bash
+cargo build --target wasm32-unknown-unknown --release
+cargo test
+```

@@ -1,0 +1,17 @@
+# {{PROJECT_NAME}}
+
+A Soroban multisig wallet contract scaffolded by [Sorobix](https://github.com/Soro-Bix/soroban-scaffold).
+
+## Template: Multisig (threshold confirmations)
+
+- `initialize(signers, threshold)`
+- `submit(to, amount, data)` — records a proposal, returns its id
+- `confirm(id)` — a signer approves; returns `true` once the threshold is reached
+- `is_confirmed(id)` / `threshold()`
+
+## Build
+
+```bash
+cargo build --target wasm32-unknown-unknown --release
+cargo test
+```

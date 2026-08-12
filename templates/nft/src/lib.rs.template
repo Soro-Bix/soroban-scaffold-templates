@@ -1,0 +1,64 @@
+#![no_std]
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String};
+
+#[contracttype]
+#[derive(Clone)]
+pub enum DataKey {
+    Admin,
+    Name,
+    Symbol,
+    NextId,
+    Owner(u32),
+    Uri(u32),
+}
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    Unauthorized = 1,
+    NotMinted = 2,
+    AlreadyMinted = 3,
+}
+
+#[contract]
+pub struct NftContract;
+
+#[contractimpl]
+impl NftContract {
+    pub fn initialize(env: Env, admin: Address, name: String, symbol: String) {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Name, &name);
+        env.storage().instance().set(&DataKey::Symbol, &symbol);
+        env.storage().instance().set(&DataKey::NextId, &1u32);
+    }
+
+    pub fn mint(env: Env, to: Address, uri: String) -> Result<u32, Error> {
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        admin.require_auth();
+        let id: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(1u32);
+        if env.storage().persistent().has(&DataKey::Owner(id)) {
+            return Err(Error::AlreadyMinted);
+        }
+        env.storage().persistent().set(&DataKey::Owner(id), &to);
+        env.storage().persistent().set(&DataKey::Uri(id), &uri);
+        env.storage().instance().set(&DataKey::NextId, &(id + 1));
+        Ok(id)
+    }
+
+    pub fn owner_of(env: Env, id: u32) -> Result<Address, Error> {
+        env.storage().persistent().get(&DataKey::Owner(id)).ok_or(Error::NotMinted)
+    }
+
+    pub fn token_uri(env: Env, id: u32) -> Result<String, Error> {
+        env.storage().persistent().get(&DataKey::Uri(id)).ok_or(Error::NotMinted)
+    }
+
+    pub fn name(env: Env) -> String {
+        env.storage().instance().get(&DataKey::Name).unwrap()
+    }
+
+    pub fn symbol(env: Env) -> String {
+        env.storage().instance().get(&DataKey::Symbol).unwrap()
+    }
+}
