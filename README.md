@@ -43,7 +43,7 @@ Every template is compiled, wasm32-built, and tested on every push via a 4-way C
 
 ## Adding a New Template
 
-See [docs/TEMPLATE_AUTHORING.md](./docs/TEMPLATE_AUTHORING.md) (coming soon — tracked in [#6](https://github.com/Soro-Bix/soroban-scaffold-templates/issues/6)) for a full guide on contributing new templates.
+See the [Template Authoring Guide](./docs/TEMPLATE_AUTHORING.md) for a full walkthrough: required structure, template variables, why every template ships a `Cargo.lock.template`, testing requirements, and the review criteria a template PR is judged against.
 
 Quick summary:
 1. Create a new directory under `templates/` with the template name
