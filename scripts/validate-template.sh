@@ -32,8 +32,13 @@ if [[ -z "$RENDERED_DIR" ]]; then
   "$REPO_ROOT/scripts/render-template.sh" "$TEMPLATE" "$RENDERED_DIR" "$PROJECT_NAME" "$AUTHOR"
 fi
 
+# Must not end on a failed test: this runs as an EXIT trap, so its return
+# value becomes the script's exit code when the script would otherwise
+# succeed. `[[ -n "$x" ]] && rm ...` returns 1 whenever CLEANUP_DIR is empty.
 cleanup() {
-  [[ -n "$CLEANUP_DIR" ]] && rm -rf "$CLEANUP_DIR"
+  if [[ -n "$CLEANUP_DIR" ]]; then
+    rm -rf "$CLEANUP_DIR"
+  fi
 }
 trap cleanup EXIT
 
