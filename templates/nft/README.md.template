@@ -1,0 +1,117 @@
+# {{PROJECT_NAME}}
+
+A Soroban NFT contract scaffolded by [Sorobix](https://github.com/Soro-Bix/soroban-scaffold).
+
+## Template: NFT (Non-Fungible Token)
+
+A non-fungible token contract with per-token ownership, metadata URIs, and an
+approval mechanism for delegated transfers.
+
+- Unique `u64` token IDs
+- Per-token metadata URI (`ipfs://…`, `https://…`, or anything else)
+- Owner-gated transfer and burn
+- Single-token approvals with `approve` / `transfer_from`
+- Events published on mint, transfer, approve, and burn
+- `require_auth()` on every state-changing function
+
+## Prerequisites
+
+- Rust 1.76+ with the `wasm32-unknown-unknown` target
+- [Stellar CLI](https://developers.stellar.org/docs/build/smart-contracts/setup)
+
+## Build
+
+```bash
+cargo build --target wasm32-unknown-unknown --release
+```
+
+The optimized WASM will be at:
+
+```
+target/wasm32-unknown-unknown/release/{{PROJECT_NAME}}.wasm
+```
+
+## Test
+
+```bash
+cargo test --locked
+```
+
+13 tests cover the full lifecycle: initialization, minting, duplicate-ID
+rejection, transfers, approvals, delegated transfers, burning, and the
+unauthorized path for each.
+
+## Contract API
+
+### Administration
+
+| Function | Description |
+|---|---|
+| `initialize(admin, name, symbol)` | Sets the collection admin and metadata. Callable once. |
+
+### Minting and burning
+
+| Function | Description |
+|---|---|
+| `mint(admin, to, token_id, metadata_uri)` | Admin-only. Fails if `token_id` already exists. |
+| `burn(owner, token_id)` | Owner-only. Destroys the token and decrements supply. |
+
+### Transfers
+
+| Function | Description |
+|---|---|
+| `transfer(from, to, token_id)` | Owner-only direct transfer. |
+| `approve(owner, spender, token_id)` | Authorizes `spender` to move one specific token. |
+| `transfer_from(spender, from, to, token_id)` | Transfer performed by an approved spender. |
+
+### Views
+
+| Function | Returns |
+|---|---|
+| `owner_of(token_id)` | Current owner, or `TokenNotFound` |
+| `token_uri(token_id)` | Metadata URI, or `TokenNotFound` |
+| `get_approved(token_id)` | Approved spender, if any |
+| `balance_of(owner)` | Number of tokens held |
+| `total_supply()` | Tokens currently in circulation |
+| `name()` / `symbol()` | Collection metadata |
+
+## Errors
+
+| Error | Raised when |
+|---|---|
+| `AlreadyInitialized` | `initialize` called twice |
+| `NotInitialized` | Any operation before `initialize` |
+| `TokenAlreadyExists` | Minting a `token_id` that is already taken |
+| `TokenNotFound` | Referencing a token that was never minted or has been burned |
+| `NotOwner` | Caller does not own the token they are acting on |
+| `NotApproved` | `transfer_from` without a matching approval |
+| `Unauthorized` | Non-admin attempting to mint |
+
+## A note on approvals
+
+Approvals are cleared whenever a token changes hands, via either `transfer` or
+`transfer_from`. Without this, a spender approved by a previous owner would
+retain the ability to move the token out from under its new owner. There is a
+test asserting this specific behaviour.
+
+## Deploy (Testnet)
+
+```bash
+stellar contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/{{PROJECT_NAME}}.wasm \
+  --source-account <YOUR_SECRET_KEY> \
+  --rpc-url https://soroban-testnet.stellar.org:443 \
+  --network-passphrase "Test SDF Network ; September 2015"
+```
+
+## Next Steps
+
+1. Run `cargo test --locked` to confirm everything passes
+2. Decide how `token_id` values are allocated for your collection
+3. Consider whether you need collection-wide operator approval
+   (`set_approval_for_all`) in addition to per-token approvals
+4. Point `metadata_uri` at your real metadata host
+
+## License
+
+MIT — authored by {{AUTHOR}}

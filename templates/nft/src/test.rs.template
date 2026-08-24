@@ -1,0 +1,251 @@
+use super::*;
+use soroban_sdk::testutils::Address as _;
+
+fn setup(env: &Env) -> (Address, NftContractClient<'static>) {
+    let contract_id = env.register(NftContract, ());
+    let client = NftContractClient::new(env, &contract_id);
+    (contract_id, client)
+}
+
+fn init_collection(env: &Env, client: &NftContractClient, admin: &Address) {
+    client.initialize(
+        admin,
+        &String::from_str(env, "Example Collection"),
+        &String::from_str(env, "EXC"),
+    );
+}
+
+fn uri(env: &Env) -> String {
+    String::from_str(env, "ipfs://example/1.json")
+}
+
+#[test]
+fn test_initialize_sets_collection_metadata() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+
+    assert_eq!(client.name(), String::from_str(&env, "Example Collection"));
+    assert_eq!(client.symbol(), String::from_str(&env, "EXC"));
+    assert_eq!(client.total_supply(), 0);
+}
+
+#[test]
+fn test_double_initialize_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+
+    let result = client.try_initialize(
+        &admin,
+        &String::from_str(&env, "Another"),
+        &String::from_str(&env, "ANO"),
+    );
+    assert_eq!(result, Err(Ok(NftError::AlreadyInitialized)));
+}
+
+#[test]
+fn test_mint_assigns_ownership_and_metadata() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+    client.mint(&admin, &alice, &1, &uri(&env));
+
+    assert_eq!(client.owner_of(&1), alice);
+    assert_eq!(client.token_uri(&1), uri(&env));
+    assert_eq!(client.balance_of(&alice), 1);
+    assert_eq!(client.total_supply(), 1);
+}
+
+#[test]
+fn test_unauthorized_mint_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let stranger = Address::generate(&env);
+    let alice = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+
+    let result = client.try_mint(&stranger, &alice, &1, &uri(&env));
+    assert_eq!(result, Err(Ok(NftError::Unauthorized)));
+}
+
+#[test]
+fn test_minting_duplicate_token_id_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+    client.mint(&admin, &alice, &1, &uri(&env));
+
+    let result = client.try_mint(&admin, &alice, &1, &uri(&env));
+    assert_eq!(result, Err(Ok(NftError::TokenAlreadyExists)));
+}
+
+#[test]
+fn test_transfer_moves_ownership_and_balances() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+    client.mint(&admin, &alice, &1, &uri(&env));
+
+    client.transfer(&alice, &bob, &1);
+
+    assert_eq!(client.owner_of(&1), bob);
+    assert_eq!(client.balance_of(&alice), 0);
+    assert_eq!(client.balance_of(&bob), 1);
+}
+
+#[test]
+fn test_transfer_by_non_owner_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+    client.mint(&admin, &alice, &1, &uri(&env));
+
+    let result = client.try_transfer(&bob, &bob, &1);
+    assert_eq!(result, Err(Ok(NftError::NotOwner)));
+    assert_eq!(client.owner_of(&1), alice);
+}
+
+#[test]
+fn test_approve_then_transfer_from() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+    client.mint(&admin, &alice, &1, &uri(&env));
+
+    client.approve(&alice, &operator, &1);
+    assert_eq!(client.get_approved(&1), Some(operator.clone()));
+
+    client.transfer_from(&operator, &alice, &bob, &1);
+
+    assert_eq!(client.owner_of(&1), bob);
+    // Approval must not survive the transfer, or the old operator could move
+    // the token again out from under its new owner.
+    assert_eq!(client.get_approved(&1), None);
+}
+
+#[test]
+fn test_transfer_from_without_approval_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let stranger = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+    client.mint(&admin, &alice, &1, &uri(&env));
+
+    let result = client.try_transfer_from(&stranger, &alice, &bob, &1);
+    assert_eq!(result, Err(Ok(NftError::NotApproved)));
+    assert_eq!(client.owner_of(&1), alice);
+}
+
+#[test]
+fn test_plain_transfer_clears_existing_approval() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+    client.mint(&admin, &alice, &1, &uri(&env));
+    client.approve(&alice, &operator, &1);
+
+    client.transfer(&alice, &bob, &1);
+
+    assert_eq!(client.get_approved(&1), None);
+    let result = client.try_transfer_from(&operator, &bob, &operator, &1);
+    assert_eq!(result, Err(Ok(NftError::NotApproved)));
+}
+
+#[test]
+fn test_burn_removes_token_and_decrements_supply() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+    client.mint(&admin, &alice, &1, &uri(&env));
+    assert_eq!(client.total_supply(), 1);
+
+    client.burn(&alice, &1);
+
+    assert_eq!(client.total_supply(), 0);
+    assert_eq!(client.balance_of(&alice), 0);
+    assert_eq!(client.try_owner_of(&1), Err(Ok(NftError::TokenNotFound)));
+}
+
+#[test]
+fn test_burn_by_non_owner_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+    let stranger = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+    client.mint(&admin, &alice, &1, &uri(&env));
+
+    let result = client.try_burn(&stranger, &1);
+    assert_eq!(result, Err(Ok(NftError::NotOwner)));
+    assert_eq!(client.owner_of(&1), alice);
+}
+
+#[test]
+fn test_operations_on_unknown_token_report_not_found() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_, client) = setup(&env);
+    let admin = Address::generate(&env);
+    let alice = Address::generate(&env);
+
+    init_collection(&env, &client, &admin);
+
+    assert_eq!(client.try_owner_of(&99), Err(Ok(NftError::TokenNotFound)));
+    assert_eq!(client.try_token_uri(&99), Err(Ok(NftError::TokenNotFound)));
+    assert_eq!(
+        client.try_transfer(&alice, &alice, &99),
+        Err(Ok(NftError::TokenNotFound))
+    );
+}

@@ -24,15 +24,22 @@ A trustless escrow contract supporting milestone-based fund release and dispute 
 - **Functions**: initialize(), fund(), mark_delivered(), approve_milestone(), raise_dispute(), resolve_dispute(), get_job()
 - **Events**: emitted on every state transition
 
+### nft — Non-Fungible Token
+An NFT contract with per-token ownership, metadata URIs, and single-token approvals for delegated transfers.
+- **Tests**: 13 passing
+- **Functions**: initialize(), mint(), transfer(), approve(), transfer_from(), burn(), owner_of(), token_uri(), get_approved(), balance_of(), total_supply(), name(), symbol()
+- **Events**: Mint, Transfer, Approve, Burn
+
 ## CI
 
-Every template is compiled, wasm32-built, and tested on every push via a 3-way CI matrix:
+Every template is compiled, wasm32-built, and tested on every push via a 4-way CI matrix:
 
 | Template | Build | WASM | Tests |
 |---|---|---|---|
 | basic | ✅ | ✅ | 7/7 |
 | token | ✅ | ✅ | 9/9 |
 | escrow | ✅ | ✅ | 7/7 |
+| nft | ✅ | ✅ | 13/13 |
 
 ## Adding a New Template
 
