@@ -63,9 +63,9 @@ Templates support these variables via Handlebars substitution:
 
 ## Contributing
 
-This project participates in the [Drips Wave Stellar contributor program](https://drips.network/wave/stellar). Open issues include new template types (NFT, multisig, timelock, vesting) and CI improvements — great opportunities for Rust/Soroban developers.
+This project participates in the [Drips Wave Stellar contributor program](https://drips.network/wave/stellar). Open issues include new template types (multisig, timelock, vesting) and CI improvements — great opportunities for Rust/Soroban developers.
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines, and the [Sorobix roadmap](https://github.com/Soro-Bix/soroban-scaffold/blob/main/ROADMAP.md) for what is planned across both repositories through November 2026.
 
 ## License
 
